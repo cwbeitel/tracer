@@ -63,4 +63,12 @@ target/
 
 venv/
 .env
-data/
+data/test_data/*.csv
+data/training_data/*.csv
+data/checkpoints
+data/dev/bk/
+data/dev/dev-v2.tgz
+
+tracer/evaluate.py
+
+todo.txt

@@ -59,13 +59,13 @@ make
 ## Training
 
 ```bash
-tracer-train --input=[path to input traces] --output=[path to model file] 
+tracer-train --data_dir=$TRACERDIR/data/training_data --train_dir=$TRACERDIR/data/checkpoints
 ```
 
 ## Base calling
 
 ```bash
-tracer-call --model=[path to model file] --input=[path to input traces] --output=[path to which to write output]
+tracer-decode --model=[path to model file] --input=[path to input traces] --output=[path to which to write output]
 ```
 
 ## Evaluation
@@ -80,7 +80,6 @@ With respect to the original goal of improving the basecall error rate beyond th
 
 ## License
 
-tracer is released under the MIT License. See [LICENSE](https://github.com/cb01/tracer/blob/master/LICENSE).
-
+tracer is released under the Apache License 2.0. See [LICENSE](https://github.com/cb01/tracer/blob/master/LICENSE). The majority of the code are modifications of the seq2seq example from the Tensor Flow library, which is covered by their [LICENSE](https://github.com/cb01/tracer/blob/master/LICENSE.tflow). If you have any suggestions about how to more appropriately provide attribution on the individual source files, let me know. I'm unsure, for example, whether the original copyright notice should be retained on each file.
 
 
