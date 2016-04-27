@@ -21,7 +21,11 @@ from tracer import seq2seq_model
 from tensorflow.python.platform import flags
 
 '''
+# Have to use same model params between training and decoding, would rather have them always
+# come from a config script so it can easily be re-used. The config script should be saved with
+# all the other model data and loaded automatically.
 tracer-train --data_dir=$TRACERDIR/data --train_dir=$TRACERDIR/data/checkpoints
+tracer-decode --trace_path=$TRACERDIR/data/dev.ids20000.in --output=$TRACERDIR/data/test
 '''
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
@@ -31,8 +35,8 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5.0,
                           "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
-tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
-tf.app.flags.DEFINE_integer("num_layers", 3, "Number of layers in the model.")
+tf.app.flags.DEFINE_integer("size", 10, "Size of each model layer.")
+tf.app.flags.DEFINE_integer("num_layers", 1, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("in_vocab_size", 20000, "Source vocabulary size.")
 tf.app.flags.DEFINE_integer("out_vocab_size", 8, "Target vocabulary size.")
 
@@ -54,6 +58,14 @@ tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_lstm", True,
                             "Whether to use an LSTM (True) or GRU (False).")
+tf.app.flags.DEFINE_boolean("debug", False,
+                            "Whether to run in debugging mode.")
+
+
+# For decoding
+tf.app.flags.DEFINE_string("trace_path", "/tmp", "Path to a trace to decode.")
+tf.app.flags.DEFINE_string("output", "/tmp", "Path to file to which to write the decoded output.")
+
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -118,14 +130,20 @@ def read_flat_data(source_path, target_path, max_size=None):
         source, target = source_file.readline(), target_file.readline()
   return data_set
 
-def create_model(session, forward_only):
+def create_model(session, forward_only, debug=False):
   """Create translation model and initialize or load parameters in session."""
+  if debug:
+    print("creating model...")
   model = seq2seq_model.Seq2SeqModel(
       FLAGS.in_vocab_size, FLAGS.out_vocab_size, _buckets,
       FLAGS.size, FLAGS.num_layers, FLAGS.max_gradient_norm, FLAGS.batch_size,
       FLAGS.learning_rate, FLAGS.learning_rate_decay_factor,
-      forward_only=forward_only, use_lstm=FLAGS.use_lstm)
+      forward_only=forward_only, use_lstm=FLAGS.use_lstm, debug=FLAGS.debug)
+  if debug:
+    print("getting checkpoint state")
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
+  if debug:
+    print("finished getting checkpoint state")
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
     model.saver.restore(session, ckpt.model_checkpoint_path)
@@ -226,3 +244,54 @@ def train():
           eval_ppx = math.exp(eval_loss) if eval_loss < 300 else float('inf')
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
         sys.stdout.flush()
+
+
+
+def decode_cli():
+    '''Make basecalls given trace input and a previously trained model.'''
+
+    with tf.Session() as sess:
+
+        print("opened session")
+
+        # Create model and load parameters.
+        model = create_model(sess, True, debug=True)
+        model.batch_size = 1  # We decode one sentence at a time.
+
+        # Currently this expects traces to be fed in in their encoded form
+
+        print("initialized model")
+
+        with open(FLAGS.output, "w") as decoded_file:
+            with open(FLAGS.trace_path, "r") as tracefile:
+         
+                trace = map(int, tracefile.readline().strip().split(" "))
+
+                while trace:
+
+                    # Which bucket does it belong to?
+                    bucket_id = 0
+                    #bucket_id = min([b for b in xrange(len(_buckets))
+                    #                  if _buckets[b][0] > len(trace)])
+                    
+                    # Get a 1-element batch to feed the sentence to the model.
+                    encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+                          {bucket_id: [(trace, [])]}, bucket_id)
+                    
+                    # Get output logits for the sentence.
+                    _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                                     target_weights, bucket_id, True)
+                    
+                    # This is a greedy decoder - outputs are just argmaxes of output_logits.
+                    outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                    
+                    # If there is an EOS symbol in outputs, cut them at that point.
+                    if data_utils.EOS_ID in outputs:
+                        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+                    
+                    # Print out decoded DNA sequence.
+                    decoded_file.write("".join([data_utils.decode_base(output) for output in outputs]))
+                    #decoded_file.write(" ".join([tf.compat.as_str(rev_target_vocab[output]) for output in outputs]))
+                    decoded_file.write("\n")
+                    trace = map(int, tracefile.readline().strip().split(" "))
+

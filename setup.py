@@ -10,6 +10,6 @@ setup(
         tracer-train=tracer.train:cli
         tracer-sim=tracer.simulate:cli
         tracer-eval=tracer.evaluate:cli
-        tracer-decode=tracer.decode:cli
+        tracer-decode=tracer.train:decode_cli
     ''',
 )

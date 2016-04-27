@@ -289,3 +289,41 @@ def prepare_data(train_path, dev_path, data_dir, input_vocabulary_size, output_v
   return (input_train_ids_path, output_train_ids_path,
           input_dev_ids_path, output_dev_ids_path,
           input_vocab_path, output_vocab_path)
+
+def encode_trace_step(intensities, vocab_size=80000, clip_intensity=400):
+    '''Given four intensity values, return an integer encoding, e, of the maximum
+    intensity value (max of a_inten.., t_inten.., ...), i, scaled by the ratio of the
+    maximum possible intensity, i_max, and the number of bins per fluorophore, b. We
+    then perform a shift equal to a multiple of the number of bins per fluorophore
+    depending on which of the four were the largest.
+
+                        e = ( i / (i_max/b) ) + (j-1)*b
+    '''
+
+    #intensities = [a_intensity, t_intensity, c_intensity, g_intensity]
+    #global_max_intensity = 400
+    #num_bins = 20000
+    vocab_size_per_fluorophore = math.floor((vocab_size - 4)/4)
+    max_ind = random.randint(0,3)
+    max_intensity = 0
+    for i, v in enumerate(intensities):
+        #print(v, max_intensity)
+        if v > max_intensity:
+            max_ind = i
+            if v > clip_intensity:
+                max_intensity = clip_intensity
+            else:
+                max_intensity = v
+
+    encoded = math.floor(max_intensity / (clip_intensity / vocab_size_per_fluorophore)) + max_ind*vocab_size_per_fluorophore + 4
+     
+    return int(encoded)
+
+def decode_base(encoded_base):
+    bases = ["A", "T", "G", "C"]
+    return bases[encoded_base - 4]
+
+
+
+
+  

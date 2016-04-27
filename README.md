@@ -78,12 +78,32 @@ tracer-decode --model=[path to model file] --input=[path to input traces] --outp
 tracer-eval --inputCalls=[path to input traces] --inputKey=[path to input traces] --output=[path to which to write output]
 ```
 
+## Example decodings
+
+As development progresses, we hopefully will see the quality of decodings improve. Here are some of the current rather terrible decodings. Obviously there's a long way to go.
+
+```bash
+1 layer, 10 neurons per layer, 5min
+decoded: ACAAAAA
+correct: TCAGCCGAACGAAGTCGCGATGCAGCCCAGTGGGATGAAACGGTCGATCGGCTCTCTACGCTACTTGAGATTAAAAAGATTTGGTGTGAGGTTGCTCGGTTTAGGTCTAC
+```
+
+```bash
+1 layer, 10 neurons per layer, 5min
+decoded: TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+correct: AATCGGGGAGACCTGCGCTTGTCGGCGCTCGTACACGATTTTTCTTACGAGCATGTTATTCGACGCCAGACATGAAGATTTCGGGATCGCTCGAAGTCTATTCAAAGTGA
+```
+
+```bash
+3 layers, 256 neurons per layer, ~2h
+decoded: TTTTA
+correct: TCAGCCGAACGAAGTCGCGATGCAGCCCAGTGGGATGAAACGGTCGATCGGCTCTCTACGCTACTTGAGATTAAAAAGATTTGGTGTGAGGTTGCTCGGTTTAGGTCTAC
+```
+
 # Conclusion
 
-With respect to the original goal of improving the basecall error rate beyond the current state of the art ([remind of value]), this experiment was [a success / so far not a success].
+With respect to the original goal of improving the basecall error rate beyond the current state of the art single-pass error rate of 13%, this experiment is so far not a success.
 
 ## License
 
 tracer is released under the Apache License 2.0. See [LICENSE](https://github.com/cb01/tracer/blob/master/LICENSE). The majority of the code are modifications of the seq2seq example from the Tensor Flow library, which is covered by their [LICENSE](https://github.com/cb01/tracer/blob/master/LICENSE.tflow). If you have any suggestions about how to more appropriately provide attribution on the individual source files, let me know. I'm unsure, for example, whether the original copyright notice should be retained on each file.
-
-

@@ -45,7 +45,7 @@ class Seq2SeqModel(object):
   def __init__(self, source_vocab_size, target_vocab_size, buckets, size,
                num_layers, max_gradient_norm, batch_size, learning_rate,
                learning_rate_decay_factor, use_lstm=False,
-               num_samples=512, forward_only=False):
+               num_samples=512, forward_only=False, debug=False):
     """Create the model.
 
     Args:
@@ -68,6 +68,9 @@ class Seq2SeqModel(object):
       num_samples: number of samples for sampled softmax.
       forward_only: if set, we do not construct the backward pass in the model.
     """
+    if debug:
+      print("initializing seq2seq model")
+
     self.source_vocab_size = source_vocab_size
     self.target_vocab_size = target_vocab_size
     self.buckets = buckets
@@ -77,12 +80,15 @@ class Seq2SeqModel(object):
         self.learning_rate * learning_rate_decay_factor)
     self.global_step = tf.Variable(0, trainable=False)
 
+
     # If we use sampled softmax, we need an output projection.
     output_projection = None
     softmax_loss_function = None
-    
+
     # Sampled softmax only makes sense if we sample less than vocabulary size.
     if num_samples > 0 and num_samples < self.target_vocab_size:
+      if debug:
+        print("performing sampled softmax")
       with tf.device("/cpu:0"):
         w = tf.get_variable("proj_w", [size, self.target_vocab_size])
         w_t = tf.transpose(w)
@@ -97,6 +103,8 @@ class Seq2SeqModel(object):
       softmax_loss_function = sampled_loss
 
     # Create the internal multi-layer cell for our RNN.
+    if debug:
+      print("creating internal multi-layer cell")
     single_cell = tf.nn.rnn_cell.GRUCell(size)
     if use_lstm:
       single_cell = tf.nn.rnn_cell.BasicLSTMCell(size)
