@@ -80,6 +80,7 @@ class Seq2SeqModel(object):
     # If we use sampled softmax, we need an output projection.
     output_projection = None
     softmax_loss_function = None
+    
     # Sampled softmax only makes sense if we sample less than vocabulary size.
     if num_samples > 0 and num_samples < self.target_vocab_size:
       with tf.device("/cpu:0"):
@@ -136,6 +137,7 @@ class Seq2SeqModel(object):
           self.encoder_inputs, self.decoder_inputs, targets,
           self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True),
           softmax_loss_function=softmax_loss_function)
+
       # If we use output projection, we need to project outputs for decoding.
       if output_projection is not None:
         for b in xrange(len(buckets)):
@@ -285,3 +287,5 @@ class Seq2SeqModel(object):
           batch_weight[batch_idx] = 0.0
       batch_weights.append(batch_weight)
     return batch_encoder_inputs, batch_decoder_inputs, batch_weights
+
+

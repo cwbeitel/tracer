@@ -21,7 +21,7 @@ from tracer import seq2seq_model
 from tensorflow.python.platform import flags
 
 '''
-tracer-train --data_dir=$TRACERDIR/data/training_data --train_dir=$TRACERDIR/data/checkpoints
+tracer-train --data_dir=$TRACERDIR/data --train_dir=$TRACERDIR/data/checkpoints
 '''
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
@@ -31,13 +31,15 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5.0,
                           "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
-tf.app.flags.DEFINE_integer("size", 128, "Size of each model layer.") #1024
-tf.app.flags.DEFINE_integer("num_layers", 1, "Number of layers in the model.") #3
+tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
+tf.app.flags.DEFINE_integer("num_layers", 3, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("in_vocab_size", 20000, "Source vocabulary size.")
 tf.app.flags.DEFINE_integer("out_vocab_size", 8, "Target vocabulary size.")
 
-tf.app.flags.DEFINE_string("train_path", "/tmp", "....")
-tf.app.flags.DEFINE_string("dev_path", "/tmp", "Directory containing data to be used to train the model.")
+tf.app.flags.DEFINE_string("in_train", "", "File containing encoded input for training.")
+tf.app.flags.DEFINE_string("out_train", "", "File containing encoded output for training.")
+tf.app.flags.DEFINE_string("in_dev", "", "File containing encoded input for checkpoint reporting.")
+tf.app.flags.DEFINE_string("out_dev", "", "File containing encoded output for checkpoint reporting.")
 
 tf.app.flags.DEFINE_string("data_dir", "/tmp", "Directory containing data to be used to train the model.")
 tf.app.flags.DEFINE_string("train_dir", "/tmp", "Directory to which to write training checkpoints.")
@@ -50,20 +52,21 @@ tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
 tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
+tf.app.flags.DEFINE_boolean("use_lstm", True,
+                            "Whether to use an LSTM (True) or GRU (False).")
 
 FLAGS = tf.app.flags.FLAGS
 
-_buckets = [(5, 10), (10, 15), (20, 25), (40, 50)]
+#_buckets = [(5, 10), (10, 15), (20, 25), (40, 50)]
+#_buckets = [(5, 30), (30, 60), (60, 90), (90, 120)] # Read length buckets, so minibatches
+# are always working with data of approximately the same size, to avoid wasting computation.
+_buckets = [(90,120)]
 
 def cli():
     """Takes pairs of raw PacBio instrument traces together with their DNA sequence and trains a deep LSTM model to be used for making base calls from trace data."""
-    
     f = flags.FLAGS
-
     f._parse_flags()
-    
     train()
-
 
 def read_data(source_path, target_path, max_size=None):
   data_set = [[] for _ in _buckets]
@@ -86,6 +89,34 @@ def read_data(source_path, target_path, max_size=None):
         source, target = source_file.readline(), target_file.readline()
   return data_set
 
+def read_flat_data(source_path, target_path, max_size=None):
+  data_set = [[] for _ in _buckets]
+  with open(source_path, "r") as source_file:
+    with open(target_path, "r") as target_file:
+      source, target = source_file.readline(), target_file.readline()
+      counter = 0
+      while source and target and (not max_size or counter < max_size):
+        counter += 1
+        if counter % 1000 == 0:
+          print("  reading data line %d" % counter)
+          sys.stdout.flush()
+        source_ids = [int(x) for x in source.split()]
+        target_ids = [int(x) for x in target.split()]
+        #print(source_ids)
+        #print(target_ids)
+        target_ids.append(data_utils.EOS_ID)
+
+        # This bucket thing won't work for the problem of traces because the 
+        # length of input and output are so different.
+        #for bucket_id, (source_size, target_size) in enumerate(_buckets):
+        #  print(bucket_id, source_size, target_size)
+        #  if len(source_ids) < source_size and len(target_ids) < target_size:
+        #    print("met condition")
+        #    data_set[bucket_id].append([source_ids, target_ids])
+        #    break
+        data_set[0].append([source_ids, target_ids]) #hack
+        source, target = source_file.readline(), target_file.readline()
+  return data_set
 
 def create_model(session, forward_only):
   """Create translation model and initialize or load parameters in session."""
@@ -93,7 +124,7 @@ def create_model(session, forward_only):
       FLAGS.in_vocab_size, FLAGS.out_vocab_size, _buckets,
       FLAGS.size, FLAGS.num_layers, FLAGS.max_gradient_norm, FLAGS.batch_size,
       FLAGS.learning_rate, FLAGS.learning_rate_decay_factor,
-      forward_only=forward_only)
+      forward_only=forward_only, use_lstm=FLAGS.use_lstm)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -103,13 +134,22 @@ def create_model(session, forward_only):
     session.run(tf.initialize_all_variables())
   return model
 
-
 def train():
   """Train a SMRT sequencing trace to DNA sequence translation model using traces of known sequence."""
   
   # Prepare the input data.
-  in_train, out_train, in_dev, out_dev, _, _ = data_utils.prepare_data(FLAGS.train_path, 
-    FLAGS.dev_path, FLAGS.data_dir, FLAGS.in_vocab_size, FLAGS.out_vocab_size)
+  #in_train, out_train, in_dev, out_dev, _, _ = data_utils.prepare_data(FLAGS.train_path, 
+  #  FLAGS.dev_path, FLAGS.data_dir, FLAGS.in_vocab_size, FLAGS.out_vocab_size)
+
+  # If paths to inputs are not provided, assume they are the following (will fail if not present)
+  if len(FLAGS.in_train) == 0:
+    in_train = os.path.join(FLAGS.data_dir, "train.ids" + str(FLAGS.in_vocab_size) + ".in")
+  if len(FLAGS.out_train) == 0:
+    out_train = os.path.join(FLAGS.data_dir, "train.ids" + str(FLAGS.out_vocab_size) + ".out")
+  if len(FLAGS.in_dev) == 0:
+    in_dev = os.path.join(FLAGS.data_dir, "dev.ids" + str(FLAGS.in_vocab_size) + ".in")
+  if len(FLAGS.out_dev) == 0:
+    out_dev = os.path.join(FLAGS.data_dir, "dev.ids" + str(FLAGS.out_vocab_size) + ".out")
 
   with tf.Session() as sess:
     # Create model.
@@ -119,8 +159,12 @@ def train():
     # Read data into buckets and compute their sizes.
     print ("Reading development and training data (limit: %d)."
            % FLAGS.max_train_data_size)
-    dev_set = read_data(in_dev, out_dev)
-    train_set = read_data(in_train, out_train, FLAGS.max_train_data_size)
+    #dev_set = read_data(in_dev, out_dev)
+    dev_set = read_flat_data(in_dev, out_dev)
+    #train_set = read_data(in_train, out_train, FLAGS.max_train_data_size)
+    train_set = read_flat_data(in_train, out_train, FLAGS.max_train_data_size)
+    #print(len(dev_set))
+    #print(len(train_set))
     train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
     train_total_size = float(sum(train_bucket_sizes))
 
@@ -153,19 +197,23 @@ def train():
 
       # Once in a while, we save checkpoint, print statistics, and run evals.
       if current_step % FLAGS.steps_per_checkpoint == 0:
+        
         # Print statistics for the previous epoch.
         perplexity = math.exp(loss) if loss < 300 else float('inf')
         print ("global step %d learning rate %.4f step-time %.2f perplexity "
                "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
                          step_time, perplexity))
+        
         # Decrease learning rate if no improvement was seen over last 3 times.
         if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
           sess.run(model.learning_rate_decay_op)
         previous_losses.append(loss)
+        
         # Save checkpoint and zero timer and loss.
         checkpoint_path = os.path.join(FLAGS.train_dir, "translate.ckpt")
         model.saver.save(sess, checkpoint_path, global_step=model.global_step)
         step_time, loss = 0.0, 0.0
+        
         # Run evals on development set and print their perplexity.
         for bucket_id in xrange(len(_buckets)):
           if len(dev_set[bucket_id]) == 0:
@@ -178,8 +226,3 @@ def train():
           eval_ppx = math.exp(eval_loss) if eval_loss < 300 else float('inf')
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
         sys.stdout.flush()
-
-
-
-
-

@@ -46,6 +46,10 @@ $ sudo easy_install --upgrade six
 $ sudo pip install --upgrade https://storage.googleapis.com/tensorflow/mac/tensorflow-0.8.0rc0-py2-none-any.whl
 ```
 
+### Running on AWS
+
+We found it was a challenge to configure tensorflow to leverage GPU's on AWS g2.4xlarge instances but included a [script](https://github.com/cb01/tracer/blob/master/ec2.sh) describing how we did it.
+
 ## Installation
 
 From the root of the repo:
@@ -59,7 +63,7 @@ make
 ## Training
 
 ```bash
-tracer-train --data_dir=$TRACERDIR/data/training_data --train_dir=$TRACERDIR/data/checkpoints
+tracer-train --data_dir=$TRACERDIR/data --train_dir=$TRACERDIR/data/checkpoints --size=256 --num_layers=3 --in_vocab_size=20000
 ```
 
 ## Base calling
